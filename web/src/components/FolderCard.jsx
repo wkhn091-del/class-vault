@@ -14,15 +14,15 @@ export default function FolderCard({ folder, onSettings, onTogglePin }) {
     <div className="group relative pt-[18px]">
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute start-0 top-0 h-[22px] w-[46%] max-w-[150px] rounded-t-[12px] transition-all duration-300 group-hover:h-[26px] group-hover:-top-1"
+        className="pointer-events-none absolute start-0 top-0 h-[22px] w-[46%] max-w-[150px] rounded-t-[12px] transition-all duration-base ease-out group-hover:-top-1 group-hover:h-[28px] motion-reduce:transition-none motion-reduce:group-hover:top-0 motion-reduce:group-hover:h-[22px]"
         style={{ backgroundColor: colour }}
       />
 
       <Link
         to={`/f/${folder.id}`}
-        className="block transition-transform duration-300 ease-out hover:-translate-y-1.5"
+        className="block transition-transform duration-base ease-out hover:-translate-y-1.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
-        <article className="relative flex min-h-[148px] flex-col justify-between rounded-2xl rounded-ss-none border border-hairline bg-surface p-5 shadow-card transition-shadow duration-300 group-hover:shadow-lift">
+        <article className="relative flex min-h-[148px] flex-col justify-between rounded-2xl rounded-ss-none border border-hairline bg-surface p-5 shadow-card transition-shadow duration-base group-hover:shadow-lift motion-reduce:transition-none">
           <div className={isAdmin ? 'pe-16' : ''}>
             <h2 className="flex items-start gap-1.5 text-[21px] leading-snug">
               {folder.is_pinned && (

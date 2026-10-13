@@ -85,18 +85,29 @@ export default function FolderPage() {
     );
   }
 
+  const colour = folder.color || tabColor(folder.name);
+
   return (
-    <>
+    <div className="relative">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-x-4 -top-10 h-48 rounded-b-[2rem] opacity-90 sm:-inset-x-6"
+        style={{
+          background: `linear-gradient(180deg, ${colour}33 0%, transparent 100%)`,
+        }}
+      />
+
+      <div className="relative">
       {back}
 
       <div className="mb-8 flex items-start gap-4">
         <span
           aria-hidden="true"
           className="mt-2.5 h-10 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: folder.color || tabColor(folder.name) }}
+          style={{ backgroundColor: colour }}
         />
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-start gap-2 text-[30px] leading-tight sm:text-[38px]">
+          <h1 className="flex items-start gap-2 text-[30px] leading-tight text-navy sm:text-[38px]">
             {folder.is_pinned && (
               <Pin className="mt-3 h-5 w-5 shrink-0 fill-current text-brass" aria-label={t.pinned} />
             )}
@@ -153,7 +164,7 @@ export default function FolderPage() {
       ) : files.length === 0 ? (
         <EmptyState title={t.noMatches}>{t.noMatchesNote}</EmptyState>
       ) : (
-        <ul className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card">
+        <ul className="overflow-hidden rounded-2xl border border-navy/10 bg-gradient-to-b from-surface to-raised shadow-card">
           {files.map((file) => (
             <FileRow
               key={file.id}
@@ -178,6 +189,7 @@ export default function FolderPage() {
       />
 
       <Previewer file={previewing} onClose={() => setPreviewing(null)} />
-    </>
+      </div>
+    </div>
   );
 }
