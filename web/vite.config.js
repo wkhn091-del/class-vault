@@ -8,8 +8,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
+        'favicon.ico',
         'brand/metivta-logo.png',
         'icons/icon-192.png',
+        'icons/icon-256.png',
         'icons/icon-512.png',
         'icons/icon-512-maskable.png',
         'icons/apple-touch-icon.png',
@@ -31,6 +33,12 @@ export default defineConfig({
           {
             src: '/icons/icon-192.png',
             sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/icon-256.png',
+            sizes: '256x256',
             type: 'image/png',
             purpose: 'any',
           },
