@@ -7,7 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['brand/metivta-logo.png', 'icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: [
+        'brand/metivta-logo.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/icon-512-maskable.png',
+        'icons/apple-touch-icon.png',
+      ],
       manifest: {
         name: 'המתיבתא · תורה ודעת',
         short_name: 'המתיבתא',
@@ -18,7 +24,7 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'any',
-        background_color: '#F7F4EF',
+        background_color: '#FFFFFF',
         theme_color: '#1E3A5F',
         categories: ['education', 'productivity'],
         icons: [
@@ -35,7 +41,7 @@ export default defineConfig({
             purpose: 'any',
           },
           {
-            src: '/icons/icon-512.png',
+            src: '/icons/icon-512-maskable.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
