@@ -3,6 +3,7 @@ import { KeyRound, ShieldCheck, Eye, Languages } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext.jsx';
 import { useLocale } from '../context/LocaleContext.jsx';
 import ScrollProgress from '../motion/ScrollProgress.jsx';
+import InstallAppButton from './InstallAppButton.jsx';
 
 const CLASS_NAME = import.meta.env.VITE_CLASS_NAME || 'המתיבתא';
 const TAGLINE = import.meta.env.VITE_CLASS_TAGLINE || 'תורה ודעת';
@@ -35,6 +36,7 @@ export default function Header({ onUnlockClick }) {
         </Link>
 
         <div className="flex items-center gap-1.5">
+          <InstallAppButton />
           <button
             onClick={toggle}
             aria-label={t.switchLang}
