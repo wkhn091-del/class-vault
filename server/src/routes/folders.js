@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase, BUCKET } from '../lib/supabase.js';
+import { supabase, getBucket } from '../lib/supabase.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { badRequest, notFound, wrap, HttpError } from '../lib/errors.js';
 
@@ -153,7 +153,7 @@ router.delete(
     if (error) throw new HttpError(500, error.message);
 
     if (files.length > 0) {
-      await supabase.storage.from(BUCKET).remove(files.map((f) => f.storage_path));
+      await supabase.storage.from(getBucket()).remove(files.map((f) => f.storage_path));
     }
 
     const { error: deleteError } = await supabase.from('folders').delete().eq('id', req.params.id);

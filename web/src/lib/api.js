@@ -1,5 +1,5 @@
 const raw = import.meta.env.VITE_API_URL;
-// Empty string = same-origin (Vite proxies /api → Render in local dev).
+// Empty string = same-origin (Vite proxies /api in local dev; Vercel serves /api in prod).
 const BASE = (raw === undefined ? 'http://localhost:4000' : String(raw)).replace(/\/$/, '');
 const TOKEN_KEY = 'class-vault-admin-token';
 
@@ -57,6 +57,25 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
   return payload;
 }
 
+function putWithProgress(url, file, contentType, onFileProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    if (contentType) xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onFileProgress) {
+        onFileProgress(event.loaded, event.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`העלאה נכשלה (${xhr.status}).`));
+    };
+    xhr.onerror = () => reject(new Error('ההעלאה נכשלה. בדקו את החיבור.'));
+    xhr.send(file);
+  });
+}
+
 export const api = {
   unlock: (passcode) => request('/api/auth/unlock', { method: 'POST', body: { passcode } }),
   checkSession: () => request('/api/auth/session', { auth: true }),
@@ -78,34 +97,82 @@ export const api = {
       ? `${BASE}/api/files/${id}/raw/file.${match[1].toLowerCase()}`
       : `${BASE}/api/files/${id}/raw`;
   },
-  uploadFiles(folderId, files, onProgress) {
-    return new Promise((resolve, reject) => {
-      const form = new FormData();
-      for (const file of files) form.append('files', file, file.name);
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${BASE}/api/files/folder/${folderId}`);
-      const token = tokenStore.get();
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) {
-          onProgress(Math.round((event.loaded / event.total) * 100));
-        }
-      };
-      xhr.onload = () => {
-        let payload = {};
-        try {
-          payload = JSON.parse(xhr.responseText);
-        } catch {
-          /* ignore */
-        }
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve({ uploaded: payload.uploaded ?? [], failed: payload.failed ?? [] });
-        } else {
-          reject(new Error(payload.error || 'ההעלאה נכשלה.'));
-        }
-      };
-      xhr.onerror = () => reject(new Error('ההעלאה נכשלה. בדקו את החיבור.'));
-      xhr.send(form);
+  /**
+   * Sign → PUT straight to Supabase → complete DB rows.
+   * Progress is overall bytes across the batch.
+   */
+  async uploadFiles(folderId, files, onProgress) {
+    const list = Array.from(files || []);
+    const signed = await request(`/api/files/folder/${folderId}/sign`, {
+      method: 'POST',
+      auth: true,
+      body: {
+        files: list.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+      },
     });
+
+    const prepared = signed.uploads || [];
+    const failed = [...(signed.failed || [])];
+    const completed = [];
+
+    const totalBytes = prepared.reduce((sum, u) => sum + (u.size || 0), 0) || 1;
+    const loadedByPath = new Map(prepared.map((u) => [u.storagePath, 0]));
+
+    const report = () => {
+      if (!onProgress) return;
+      let loaded = 0;
+      for (const v of loadedByPath.values()) loaded += v;
+      onProgress(Math.min(100, Math.round((loaded / totalBytes) * 100)));
+    };
+
+    await mapPool(prepared, 3, async (item) => {
+      const file = list[item.index];
+      if (!file) {
+        failed.push({ name: item.name, reason: 'File missing from selection.' });
+        return;
+      }
+      try {
+        await putWithProgress(item.signedUrl, file, item.contentType, (loaded) => {
+          loadedByPath.set(item.storagePath, loaded);
+          report();
+        });
+        loadedByPath.set(item.storagePath, item.size || file.size);
+        report();
+        completed.push({
+          name: item.name,
+          storagePath: item.storagePath,
+          size: item.size || file.size,
+          contentType: item.contentType,
+        });
+      } catch (err) {
+        failed.push({ name: item.name, reason: err.message || 'Upload failed.' });
+      }
+    });
+
+    if (completed.length === 0) {
+      throw new Error(failed[0]?.reason || 'ההעלאה נכשלה.');
+    }
+
+    const result = await request(`/api/files/folder/${folderId}/complete`, {
+      method: 'POST',
+      auth: true,
+      body: { files: completed },
+    });
+
+    return {
+      uploaded: result.uploaded ?? [],
+      failed: [...failed, ...(result.failed ?? [])],
+    };
   },
 };
+
+async function mapPool(items, limit, task) {
+  const queue = [...items];
+  const workers = Array.from({ length: Math.min(limit, items.length) || 0 }, async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      await task(item);
+    }
+  });
+  await Promise.all(workers);
+}

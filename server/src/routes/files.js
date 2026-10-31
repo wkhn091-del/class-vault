@@ -1,8 +1,6 @@
 import { Router } from 'express';
-import { Readable } from 'node:stream';
-import multer from 'multer';
 import { config } from '../config.js';
-import { supabase, BUCKET } from '../lib/supabase.js';
+import { supabase, getBucket } from '../lib/supabase.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { buildStoragePath, tidyDisplayName, mapWithLimit } from '../lib/storage.js';
 import { resolveContentType } from '../lib/mime.js';
@@ -11,26 +9,98 @@ import { badRequest, notFound, wrap, HttpError } from '../lib/errors.js';
 
 const router = Router();
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: config.maxFileBytes, files: 30, fields: 20 },
-});
-
 /**
- * POST /api/files/folder/:folderId — admin.
- *
- * .any() rather than .array('files') on purpose: a mismatched field name used
- * to surface as an opaque 500. Now anything multipart is accepted and each
- * file is handled independently, so one bad file no longer sinks the batch.
+ * POST /api/files/folder/:folderId/sign — admin.
+ * Returns short-lived Supabase upload URLs so the browser puts bytes straight
+ * into Storage (works on Vercel Hobby; avoids the 4.5 MB body cap).
  */
 router.post(
-  '/folder/:folderId',
+  '/folder/:folderId/sign',
   requireAdmin,
-  upload.any(),
   wrap(async (req, res) => {
     const { folderId } = req.params;
-    const incoming = Array.isArray(req.files) ? req.files : [];
+    const incoming = Array.isArray(req.body?.files) ? req.body.files : [];
     if (incoming.length === 0) throw badRequest('No files arrived. Pick at least one and try again.');
+    if (incoming.length > 30) throw badRequest('Upload at most 30 files at a time.');
+
+    const { data: folder, error } = await supabase
+      .from('folders')
+      .select('id')
+      .eq('id', folderId)
+      .maybeSingle();
+    if (error) throw new HttpError(500, error.message);
+    if (!folder) throw notFound('That folder does not exist.');
+
+    const uploads = [];
+    const failed = [];
+
+    for (let index = 0; index < incoming.length; index += 1) {
+      const item = incoming[index];
+      const name = tidyDisplayName(item?.name);
+      const size = Number(item?.size) || 0;
+      const contentType = resolveContentType(name, item?.type || item?.mimeType || '');
+
+      if (!name || name === 'file') {
+        failed.push({ index, name: String(item?.name || 'file'), reason: 'Give the file a name.' });
+        continue;
+      }
+      if (size <= 0) {
+        failed.push({ index, name, reason: 'Empty file.' });
+        continue;
+      }
+      if (size > config.maxFileBytes) {
+        failed.push({
+          index,
+          name,
+          reason: `File is over the ${Math.round(config.maxFileBytes / (1024 * 1024))} MB limit.`,
+        });
+        continue;
+      }
+
+      const storagePath = buildStoragePath(folderId, name);
+      const { data, error: signError } = await supabase.storage
+        .from(getBucket())
+        .createSignedUploadUrl(storagePath);
+
+      if (signError || !data?.signedUrl) {
+        failed.push({
+          index,
+          name,
+          reason: describeStorageError(signError?.message) || signError?.message || 'Could not sign upload.',
+        });
+        continue;
+      }
+
+      uploads.push({
+        index,
+        name,
+        storagePath,
+        signedUrl: data.signedUrl,
+        token: data.token,
+        contentType,
+        size,
+      });
+    }
+
+    if (uploads.length === 0) {
+      throw new HttpError(502, failed[0]?.reason || 'None of those files could be prepared.');
+    }
+
+    res.json({ uploads, failed });
+  })
+);
+
+/**
+ * POST /api/files/folder/:folderId/complete — admin.
+ * After the browser finishes PUTting to Supabase, record the rows.
+ */
+router.post(
+  '/folder/:folderId/complete',
+  requireAdmin,
+  wrap(async (req, res) => {
+    const { folderId } = req.params;
+    const incoming = Array.isArray(req.body?.files) ? req.body.files : [];
+    if (incoming.length === 0) throw badRequest('Nothing to complete.');
 
     const { data: folder, error } = await supabase
       .from('folders')
@@ -43,19 +113,18 @@ router.post(
     const uploaded = [];
     const failed = [];
 
-    // Three at a time: fast enough to feel instant, bounded enough that a
-    // 512 MB instance doesn't fall over on a batch of large PDFs.
-    await mapWithLimit(incoming, 3, async (file) => {
-      const name = tidyDisplayName(file.originalname);
-      const storagePath = buildStoragePath(folderId, name);
-      const contentType = resolveContentType(name, file.mimetype);
+    await mapWithLimit(incoming, 5, async (item) => {
+      const name = tidyDisplayName(item?.name);
+      const storagePath = String(item?.storagePath || '');
+      const contentType = resolveContentType(name, item?.contentType || item?.mimeType || '');
+      const size = Number(item?.size) || 0;
+
+      if (!storagePath.startsWith(`${folderId}/`)) {
+        failed.push({ name, reason: 'Invalid storage path.' });
+        return;
+      }
 
       try {
-        const { error: uploadError } = await supabase.storage
-          .from(BUCKET)
-          .upload(storagePath, file.buffer, { contentType, upsert: false });
-        if (uploadError) throw new Error(uploadError.message);
-
         const { data: row, error: insertError } = await supabase
           .from('files')
           .insert({
@@ -63,20 +132,19 @@ router.post(
             name,
             storage_path: storagePath,
             mime_type: contentType,
-            size_bytes: file.size,
+            size_bytes: size,
           })
           .select('id, name, mime_type, size_bytes, created_at')
           .single();
 
         if (insertError) {
-          // Never leave an object in the bucket with no row pointing at it.
-          await supabase.storage.from(BUCKET).remove([storagePath]);
+          await supabase.storage.from(getBucket()).remove([storagePath]);
           throw new Error(insertError.message);
         }
 
         uploaded.push(row);
       } catch (err) {
-        console.error(`[upload] ${name}: ${err.message}`);
+        console.error(`[complete] ${name}: ${err.message}`);
         failed.push({ name, reason: describeStorageError(err.message) || err.message });
       }
     });
@@ -103,7 +171,7 @@ router.get(
     if (!file) throw notFound('That file is no longer here.');
 
     const { data, error: signError } = await supabase.storage
-      .from(BUCKET)
+      .from(getBucket())
       .createSignedUrl(file.storage_path, 300);
     if (signError) throw new HttpError(500, signError.message);
 
@@ -112,86 +180,51 @@ router.get(
 );
 
 /**
- * GET /api/files/:id/raw  and  /api/files/:id/raw/:filename — public.
- *
- * A clean, stable, query-string-free URL that streams the file inline. The
- * Microsoft Office viewer and Google's viewer both fetch the document from
- * their own servers, so they need a plain public URL — a Supabase signed URL
- * carries a ?token= query string and a five-minute clock, which those viewers
- * handle badly. The optional trailing :filename exists only so the URL ends in
- * the right extension, which is how both viewers decide which renderer to use.
+ * GET /api/files/:id/raw[/:filename] — public.
+ * 302 to a Supabase signed URL (no streaming through Vercel — body-size safe).
+ * Office/Google viewers hit this stable extension URL; they follow the redirect.
  */
-const streamRaw = wrap(async (req, res) => {
+const redirectRaw = wrap(async (req, res) => {
   const { data: file, error } = await supabase
     .from('files')
-    .select('name, storage_path, mime_type, size_bytes')
+    .select('name, storage_path, mime_type')
     .eq('id', req.params.id)
     .maybeSingle();
   if (error) throw new HttpError(500, error.message);
   if (!file) throw notFound('That file is no longer here.');
 
   const { data, error: signError } = await supabase.storage
-    .from(BUCKET)
+    .from(getBucket())
     .createSignedUrl(file.storage_path, 1800);
   if (signError) throw new HttpError(500, signError.message);
 
-  const upstream = await fetch(data.signedUrl);
-  if (!upstream.ok || !upstream.body) throw new HttpError(502, 'Could not read that file from storage.');
-
-  // Uploaded HTML is served as text/plain from this origin. We only ever read
-  // it with fetch() and hand it to a sandboxed srcdoc, so nothing is lost — and
-  // opening this URL directly can't execute someone's markup on the API origin.
-  const type = String(file.mime_type || '');
-  const safeType = type.includes('html') ? 'text/plain; charset=utf-8' : type || 'application/octet-stream';
-
-  res.setHeader('Content-Type', safeType);
-  res.setHeader('Content-Disposition', 'inline');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'private, max-age=300');
-  if (file.size_bytes) res.setHeader('Content-Length', String(file.size_bytes));
-
-  Readable.fromWeb(upstream.body).pipe(res);
+  res.redirect(302, data.signedUrl);
 });
 
-router.get('/:id/raw', streamRaw);
-router.get('/:id/raw/:filename', streamRaw);
+router.get('/:id/raw', redirectRaw);
+router.get('/:id/raw/:filename', redirectRaw);
 
 /**
  * GET /api/files/:id/download — public.
- *
- * Streamed through the API rather than redirected, so we can set
- * Content-Disposition ourselves. Supabase's ?download= parameter mangles
- * non-ASCII, which meant Hebrew filenames arrived as question marks.
+ * Redirect to a signed URL that forces download with the real (incl. Hebrew) name.
  */
 router.get(
   '/:id/download',
   wrap(async (req, res) => {
     const { data: file, error } = await supabase
       .from('files')
-      .select('name, storage_path, mime_type, size_bytes')
+      .select('name, storage_path')
       .eq('id', req.params.id)
       .maybeSingle();
     if (error) throw new HttpError(500, error.message);
     if (!file) throw notFound('That file is no longer here.');
 
     const { data, error: signError } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(file.storage_path, 300);
+      .from(getBucket())
+      .createSignedUrl(file.storage_path, 300, { download: file.name });
     if (signError) throw new HttpError(500, signError.message);
 
-    const upstream = await fetch(data.signedUrl);
-    if (!upstream.ok || !upstream.body) throw new HttpError(502, 'Could not read that file from storage.');
-
-    // RFC 5987: ASCII fallback plus a UTF-8 encoded real name.
-    const ascii = file.name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
-    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`
-    );
-    if (file.size_bytes) res.setHeader('Content-Length', String(file.size_bytes));
-
-    Readable.fromWeb(upstream.body).pipe(res);
+    res.redirect(302, data.signedUrl);
   })
 );
 
@@ -229,7 +262,7 @@ router.delete(
     if (error) throw new HttpError(500, error.message);
     if (!file) throw notFound('That file is no longer here.');
 
-    await supabase.storage.from(BUCKET).remove([file.storage_path]);
+    await supabase.storage.from(getBucket()).remove([file.storage_path]);
 
     const { error: deleteError } = await supabase.from('files').delete().eq('id', file.id);
     if (deleteError) throw new HttpError(500, deleteError.message);

@@ -122,66 +122,47 @@ folder and drop files into it.
 
 ---
 
-## Deploying
+## Deploying (free — Vercel only)
 
-### Backend on Render
+The React app and the Express API both run on **Vercel Hobby** (no Render/Railway).
+Uploads go straight from the browser to **Supabase Storage** via signed URLs, so large
+files never hit Vercel’s 4.5 MB body limit.
 
 1. Push this repo to GitHub.
-2. In Render: **New → Web Service**, connect the repo.
+2. In Vercel: **Add New → Project**, import the repo.
 3. Settings:
-   - **Root Directory**: `server`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-4. Add environment variables: `ADMIN_PASSCODE`, `JWT_SECRET`, `SUPABASE_URL`,
-   `SUPABASE_SERVICE_KEY`, `SUPABASE_BUCKET=vault`, `MAX_FILE_MB=50`, `NODE_ENV=production`.
-   Leave `CORS_ORIGINS` for now — you need the Vercel URL first.
-5. Deploy, then copy the service URL, e.g. `https://class-vault-api.onrender.com`.
+   - **Root Directory**: leave empty (repo root) — uses the root `vercel.json`
+4. Environment variables (Production + Preview):
 
-There's a `render.yaml` at the repo root if you'd rather use Render Blueprints — point Render at it
-and it will read the service config, then prompt you for the secret values.
+| Key | Notes |
+|---|---|
+| `ADMIN_PASSCODE` | Teacher unlock code |
+| `JWT_SECRET` | Long random string |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | **service_role** key (not anon) |
+| `SUPABASE_BUCKET` | `vault` |
+| `MAX_FILE_MB` | `50` |
+| `NODE_ENV` | `production` |
+| `CORS_ORIGINS` | your Vercel URL, e.g. `https://class-vault-five.vercel.app` |
+| `VITE_API_URL` | leave **empty** (same-origin `/api`) |
+| `VITE_CLASS_NAME` / `VITE_CLASS_SUBTITLE` / `VITE_CLASS_TAGLINE` / `VITE_LOCALE` | brand |
 
-> Render's free tier sleeps after fifteen minutes of no traffic, so the first visit of the day takes
-> about thirty seconds to wake. The paid Starter tier removes that. Railway has no sleep on its trial
-> plan, which some people prefer for exactly this reason.
+5. Deploy. The site and `/api/*` share one domain.
 
-### Backend on Railway instead
+### Local development
 
-1. **New Project → Deploy from GitHub repo**.
-2. In **Settings → Root Directory**, set `server`. Railway detects Node and runs `npm start`.
-3. Add the same environment variables under **Variables**.
-4. Under **Settings → Networking**, click **Generate Domain** and copy it.
+```bash
+# terminal 1 — API
+cd server && npm install && npm start
 
-### Frontend on Vercel
-
-1. **Add New → Project**, import the repo.
-2. Settings:
-   - **Root Directory**: `web`
-   - **Framework Preset**: Vite (detected automatically)
-   - **Build Command**: `npm run build`, **Output Directory**: `dist`
-3. Environment variables:
-   - `VITE_API_URL` → your Render or Railway URL, no trailing slash
-   - `VITE_CLASS_NAME`, `VITE_CLASS_SUBTITLE`
-4. Deploy and copy the resulting URL.
-
-### Close the loop
-
-Go back to Render or Railway and set:
-
-```
-CORS_ORIGINS=https://your-project.vercel.app
+# terminal 2 — web (proxies /api → localhost:4000)
+cd web && npm install && npm run dev
 ```
 
-Redeploy the backend. Until you do this the browser will block every API call, which shows up as
-"Cannot reach the server" in the interface.
+### Optional: classic Node host
 
-If you add a custom domain later, put both origins in, comma separated:
+`server/` still runs with `npm start` on Render/Railway if you want. Prefer Vercel for the free setup above. `render.yaml` remains for that path.
 
-```
-CORS_ORIGINS=https://your-project.vercel.app,https://vault.yourdomain.com
-```
-
-`web/vercel.json` already rewrites all paths to `index.html`, so refreshing on `/f/<id>` works
-instead of 404ing.
 
 ---
 

@@ -89,14 +89,14 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    // Dev: browser hits same origin so Render CORS (Vercel-only) does not block localhost.
+    // Dev: same-origin /api → local Express (npm run dev:api). Production uses Vercel /api.
     proxy: {
       '/api': {
-        target: 'https://class-vault.onrender.com',
+        target: 'http://localhost:4000',
         changeOrigin: true,
       },
       '/health': {
-        target: 'https://class-vault.onrender.com',
+        target: 'http://localhost:4000',
         changeOrigin: true,
       },
     },
