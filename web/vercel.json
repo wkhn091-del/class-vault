@@ -1,8 +1,22 @@
 {
   "rewrites": [
     {
-      "source": "/((?!api/|icons/|brand/|assets/|favicon\\.ico|.*\\..*).*)",
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/health",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/|health|icons/|brand/|assets/|favicon\\.ico|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|.*\\..*).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "includeFiles": "server/**"
+    }
+  }
 }
