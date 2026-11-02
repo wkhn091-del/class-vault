@@ -16,6 +16,7 @@ import Counter from '../motion/Counter.jsx';
 import Marquee from '../motion/Marquee.jsx';
 import SubjectDoors from '../components/SubjectDoors.jsx';
 import Hero from '../components/Hero.jsx';
+import TeacherHero from '../components/TeacherHero.jsx';
 import StickyDoorsCta from '../components/StickyDoorsCta.jsx';
 
 const byPinThenName = (a, b) =>
@@ -84,7 +85,15 @@ export default function Home() {
 
   return (
     <>
-      <Hero />
+      {isAdmin ? (
+        <TeacherHero
+          folderCount={folderCount}
+          fileCount={totalFiles}
+          onCreate={() => setCreating(true)}
+        />
+      ) : (
+        <Hero />
+      )}
 
       {error && (
         <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">

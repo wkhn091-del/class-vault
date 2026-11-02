@@ -40,7 +40,7 @@ export function Field({ label, hint, ...props }) {
   );
 }
 
-export function Modal({ open, onClose, title, children, wide = false }) {
+export function Modal({ open, onClose, title, children, wide = false, footer = null }) {
   const reduce = useReducedMotion();
   const { t } = useLocale();
 
@@ -58,7 +58,7 @@ export function Modal({ open, onClose, title, children, wide = false }) {
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4 md:p-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -75,9 +75,11 @@ export function Modal({ open, onClose, title, children, wide = false }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 }}
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-            className={`relative w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-t-3xl border border-hairline bg-surface p-6 shadow-lift sm:rounded-2xl`}
+            className={`relative flex w-full flex-col overflow-hidden rounded-t-3xl border border-hairline bg-surface shadow-lift sm:rounded-2xl ${
+              wide ? 'max-w-3xl' : 'max-w-md'
+            } max-h-[min(92vh,900px)]`}
           >
-            <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-hairline/80 px-5 pb-4 pt-5 sm:px-6">
               <h2 className="text-2xl">{title}</h2>
               <button
                 onClick={onClose}
@@ -87,7 +89,14 @@ export function Modal({ open, onClose, title, children, wide = false }) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {children}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+              {children}
+            </div>
+            {footer && (
+              <div className="shrink-0 border-t border-hairline/80 bg-raised/80 px-5 py-4 sm:px-6">
+                {footer}
+              </div>
+            )}
           </motion.div>
         </div>
       )}

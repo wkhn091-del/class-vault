@@ -18,7 +18,6 @@ export default function FolderSettingsDialog({ folder, open, onClose, onSaved })
   const { t } = useLocale();
   const toast = useToast();
 
-  // Reset whenever a different folder is opened.
   useEffect(() => {
     if (!folder) return;
     setName(folder.name);
@@ -33,7 +32,7 @@ export default function FolderSettingsDialog({ folder, open, onClose, onSaved })
   const preview = color ?? tabColor(name || folder.name);
 
   async function submit(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
     setBusy(true);
     setError('');
     try {
@@ -53,8 +52,22 @@ export default function FolderSettingsDialog({ folder, open, onClose, onSaved })
     }
   }
 
+  const footer = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      {error ? <p className="text-[14px] font-semibold text-danger">{error}</p> : <span />}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onClose}>
+          {t.cancel}
+        </Button>
+        <Button type="button" variant="brass" busy={busy} disabled={!name.trim()} onClick={submit}>
+          {t.saveChanges}
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
-    <Modal open={open} onClose={onClose} title={t.folderSettings}>
+    <Modal open={open} onClose={onClose} title={t.folderSettings} footer={footer}>
       <form onSubmit={submit} className="space-y-5">
         <Field label={t.folderName} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <Field
@@ -121,9 +134,7 @@ export default function FolderSettingsDialog({ folder, open, onClose, onSaved })
         >
           <Pin className={`h-[18px] w-[18px] shrink-0 ${pinned ? 'fill-brass text-brass' : 'text-graphite'}`} />
           <span className="flex-1 text-[15px] font-semibold">{pinned ? t.unpin : t.pin}</span>
-          <span
-            className={`h-6 w-11 rounded-full p-0.5 transition-colors ${pinned ? 'bg-brass' : 'bg-hairline'}`}
-          >
+          <span className={`h-6 w-11 rounded-full p-0.5 transition-colors ${pinned ? 'bg-brass' : 'bg-hairline'}`}>
             <span
               className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${
                 pinned ? 'translate-x-5 rtl:-translate-x-5' : ''
@@ -131,17 +142,6 @@ export default function FolderSettingsDialog({ folder, open, onClose, onSaved })
             />
           </span>
         </button>
-
-        {error && <p className="text-[14px] font-semibold text-danger">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            {t.cancel}
-          </Button>
-          <Button type="submit" variant="brass" busy={busy} disabled={!name.trim()}>
-            {t.saveChanges}
-          </Button>
-        </div>
       </form>
     </Modal>
   );
