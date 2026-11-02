@@ -99,16 +99,27 @@ export const api = {
       : `${BASE}/api/files/${id}/raw`;
   },
   /**
-   * Resolve a Supabase signed URL via JSON, then click it.
+   * Resolve a Supabase signed URL via JSON, then click / navigate to it.
    * Avoids same-origin /api navigations that Chrome's service worker breaks.
+   * Open-in-tab opens a blank window synchronously so Chrome still treats it
+   * as a user gesture after the await.
    */
   async download(id) {
     const { url, name } = await this.fileLink(id, { download: true });
     clickAnchor(url, { downloadName: name });
   },
   async openInTab(id) {
-    const { url } = await this.fileLink(id);
-    clickAnchor(url, { newTab: true });
+    // Must open synchronously inside the click handler — after await, Chrome
+    // treats target=_blank as a blocked popup.
+    const tab = window.open('about:blank', '_blank');
+    try {
+      const { url } = await this.fileLink(id);
+      if (tab) tab.location.replace(url);
+      else clickAnchor(url, { newTab: true });
+    } catch (err) {
+      if (tab) tab.close();
+      throw err;
+    }
   },
   /**
    * Sign → PUT straight to Supabase → complete DB rows.
