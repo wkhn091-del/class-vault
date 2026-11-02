@@ -99,23 +99,30 @@ export const api = {
       : `${BASE}/api/files/${id}/raw`;
   },
   /**
-   * Resolve a Supabase signed URL via JSON, then click / navigate to it.
-   * Avoids same-origin /api navigations that Chrome's service worker breaks.
-   * Open-in-tab opens a blank window synchronously so Chrome still treats it
-   * as a user gesture after the await.
+   * Fetch bytes via signed URL, then hand the browser a same-origin blob.
+   * Fixes two Chrome issues with direct Supabase links:
+   * 1) Hebrew names in Content-Disposition become garbage (A999A295A8_…)
+   * 2) HTML served as text/plain/octet-stream shows source instead of the page
    */
   async download(id) {
-    const { url, name } = await this.fileLink(id, { download: true });
-    clickAnchor(url, { downloadName: name });
+    const { url, name, mimeType } = await this.fileLink(id);
+    const objectUrl = await blobUrlFromSigned(url, name, mimeType);
+    try {
+      clickAnchor(objectUrl, { downloadName: name || 'file' });
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    }
   },
   async openInTab(id) {
     // Must open synchronously inside the click handler — after await, Chrome
     // treats target=_blank as a blocked popup.
     const tab = window.open('about:blank', '_blank');
     try {
-      const { url } = await this.fileLink(id);
-      if (tab) tab.location.replace(url);
-      else clickAnchor(url, { newTab: true });
+      const { url, name, mimeType } = await this.fileLink(id);
+      const objectUrl = await blobUrlFromSigned(url, name, mimeType);
+      if (tab) tab.location.replace(objectUrl);
+      else clickAnchor(objectUrl, { newTab: true });
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
     } catch (err) {
       if (tab) tab.close();
       throw err;
@@ -212,4 +219,22 @@ function clickAnchor(url, { downloadName, newTab } = {}) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+function mimeForFile(name = '', mimeType = '') {
+  const lower = String(name).toLowerCase();
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html; charset=utf-8';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (mimeType && !/^application\/octet-stream/i.test(mimeType) && !/^text\/plain/i.test(mimeType)) {
+    return mimeType;
+  }
+  return mimeType || 'application/octet-stream';
+}
+
+async function blobUrlFromSigned(url, name, mimeType) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('הקובץ לא נטען.');
+  const buffer = await response.arrayBuffer();
+  const blob = new Blob([buffer], { type: mimeForFile(name, mimeType) });
+  return URL.createObjectURL(blob);
 }
