@@ -176,6 +176,12 @@ export default function FolderPage() {
                   files: current.files.filter((f) => f.id !== fileId),
                 }))
               }
+              onRenamed={(updated) =>
+                setFolder((current) => ({
+                  ...current,
+                  files: current.files.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)),
+                }))
+              }
             />
           ))}
         </ul>

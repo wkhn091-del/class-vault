@@ -120,6 +120,12 @@ const TABS = [
   '#6B6A8A', // muted violet
 ];
 
+/** Curated swatches for teacher colour picks (settings + new folder). */
+export const FOLDER_SWATCHES = [
+  '#c9a227', '#5e7f73', '#8c5a56', '#4e6585', '#a0763f', '#6b6a8a',
+  '#7a8c5a', '#9a5f7e', '#3f6b6b', '#8a8f98',
+];
+
 export function tabColor(seed = '') {
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 9973;

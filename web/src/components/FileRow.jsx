@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Download, Eye, Trash2, FileText, Image, FileType2, Film, Music, Code2, File,
-  Table2, Presentation, FileSpreadsheet, FileType,
+  Table2, Presentation, FileSpreadsheet, FileType, Pencil, Check, X,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { formatBytes, formatDate, previewKind, extensionOf } from '../lib/format.js';
@@ -9,8 +9,6 @@ import { useAdmin } from '../context/AdminContext.jsx';
 import { useLocale } from '../context/LocaleContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 
-/** Office files get their own icon and tint per application, the way the
-    desktop does it — a spreadsheet should never look like a slide deck. */
 function officeIcon(name = '') {
   if (/\.(xls|xlsx|xlsm|ods)$/i.test(name)) return FileSpreadsheet;
   if (/\.(ppt|pptx|odp)$/i.test(name)) return Presentation;
@@ -38,7 +36,7 @@ const TINTS = {
   none: 'bg-graphite/10 text-graphite',
 };
 
-export default function FileRow({ file, onPreview, onDeleted }) {
+export default function FileRow({ file, onPreview, onDeleted, onRenamed }) {
   const kind = previewKind(file.mime_type, file.name);
   const Icon = kind === 'office' ? officeIcon(file.name) : (ICONS[kind] ?? File);
   const tint = kind === 'office' ? officeTint(file.name) : (TINTS[kind] ?? TINTS.none);
@@ -46,6 +44,8 @@ export default function FileRow({ file, onPreview, onDeleted }) {
   const { t, locale } = useLocale();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(file.name);
 
   async function remove() {
     if (!window.confirm(t.deleteFileConfirm(file.name))) return;
@@ -60,6 +60,26 @@ export default function FileRow({ file, onPreview, onDeleted }) {
     }
   }
 
+  async function saveRename() {
+    const next = draft.trim();
+    if (!next || next === file.name) {
+      setRenaming(false);
+      setDraft(file.name);
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await api.renameFile(file.id, next);
+      onRenamed?.(updated);
+      setRenaming(false);
+      toast.ok(t.fileRenamed);
+    } catch (err) {
+      toast.problem(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const openable = kind !== 'none';
 
   return (
@@ -70,52 +90,104 @@ export default function FileRow({ file, onPreview, onDeleted }) {
         <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
       </span>
 
-      <button
-        onClick={() => openable && onPreview(file)}
-        disabled={!openable}
-        className="min-w-0 flex-1 text-start disabled:cursor-default"
-      >
-        <span className="ltr-run block truncate text-[15px] font-semibold leading-tight">{file.name}</span>
-        <span className="tabular mt-1 block text-[13px] text-mute">
-          {extensionOf(file.name).toUpperCase() || '—'} · {formatBytes(file.size_bytes, locale)} ·{' '}
-          {formatDate(file.created_at, locale)}
-        </span>
-      </button>
-
-      <div className="flex shrink-0 items-center gap-0.5">
-        {openable && (
+      {renaming ? (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveRename();
+              if (e.key === 'Escape') {
+                setRenaming(false);
+                setDraft(file.name);
+              }
+            }}
+            autoFocus
+            className="ltr-run min-w-0 flex-1 rounded-lg border border-navy/30 bg-surface px-2.5 py-1.5 text-[15px] font-semibold focus:border-navy"
+          />
           <button
-            onClick={() => onPreview(file)}
-            aria-label={`${t.preview}: ${file.name}`}
+            type="button"
+            onClick={saveRename}
+            aria-label={t.saveChanges}
+            className="rounded-xl p-2 text-navy hover:bg-navy/10"
+          >
+            <Check className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRenaming(false);
+              setDraft(file.name);
+            }}
+            aria-label={t.cancel}
+            className="rounded-xl p-2 text-graphite hover:bg-ink/[0.06]"
+          >
+            <X className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => openable && onPreview(file)}
+          disabled={!openable}
+          className="min-w-0 flex-1 text-start disabled:cursor-default"
+        >
+          <span className="ltr-run block truncate text-[15px] font-semibold leading-tight">{file.name}</span>
+          <span className="tabular mt-1 block text-[13px] text-mute">
+            {extensionOf(file.name).toUpperCase() || '—'} · {formatBytes(file.size_bytes, locale)} ·{' '}
+            {formatDate(file.created_at, locale)}
+          </span>
+        </button>
+      )}
+
+      {!renaming && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          {openable && (
+            <button
+              onClick={() => onPreview(file)}
+              aria-label={`${t.preview}: ${file.name}`}
+              className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-navy/10 hover:text-navy"
+            >
+              <Eye className="h-[18px] w-[18px]" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await api.download(file.id);
+              } catch (err) {
+                toast.problem(err.message);
+              }
+            }}
+            aria-label={`${t.download}: ${file.name}`}
             className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-navy/10 hover:text-navy"
           >
-            <Eye className="h-[18px] w-[18px]" />
+            <Download className="h-[18px] w-[18px]" />
           </button>
-        )}
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await api.download(file.id);
-            } catch (err) {
-              toast.problem(err.message);
-            }
-          }}
-          aria-label={`${t.download}: ${file.name}`}
-          className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-navy/10 hover:text-navy"
-        >
-          <Download className="h-[18px] w-[18px]" />
-        </button>
-        {isAdmin && (
-          <button
-            onClick={remove}
-            aria-label={`${t.deleteFile}: ${file.name}`}
-            className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-danger/10 hover:text-danger"
-          >
-            <Trash2 className="h-[18px] w-[18px]" />
-          </button>
-        )}
-      </div>
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(file.name);
+                  setRenaming(true);
+                }}
+                aria-label={`${t.rename}: ${file.name}`}
+                className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-navy/10 hover:text-navy"
+              >
+                <Pencil className="h-[18px] w-[18px]" />
+              </button>
+              <button
+                onClick={remove}
+                aria-label={`${t.deleteFile}: ${file.name}`}
+                className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-danger/10 hover:text-danger"
+              >
+                <Trash2 className="h-[18px] w-[18px]" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </li>
   );
 }

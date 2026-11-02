@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Pin, Check } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { tabColor } from '../lib/format.js';
+import { FOLDER_SWATCHES, tabColor } from '../lib/format.js';
 import { useLocale } from '../context/LocaleContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { Button, Field, Modal } from './ui.jsx';
-
-/** Archival tab stock — the same muted range the automatic colours come from. */
-const SWATCHES = [
-  '#c9a227', '#5e7f73', '#8c5a56', '#4e6585', '#a0763f', '#6b6a8a',
-  '#7a8c5a', '#9a5f7e', '#3f6b6b', '#8a8f98',
-];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -83,7 +77,7 @@ export default function FolderSettingsDialog({ folder, open, onClose, onSaved })
               {t.colorAuto}
             </button>
 
-            {SWATCHES.map((swatch) => (
+            {FOLDER_SWATCHES.map((swatch) => (
               <button
                 key={swatch}
                 type="button"

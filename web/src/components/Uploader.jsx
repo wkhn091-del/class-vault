@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { UploadCloud, Loader2 } from 'lucide-react';
+import { UploadCloud, Loader2, FileUp } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useLocale } from '../context/LocaleContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -24,7 +24,6 @@ export default function Uploader({ folderId, onUploaded }) {
       const { uploaded, failed } = await api.uploadFiles(folderId, files, setProgress);
       if (uploaded.length > 0) onUploaded(uploaded);
 
-      // A partial batch reports both halves instead of claiming success.
       if (failed.length === 0) toast.ok(t.uploaded(uploaded.length));
       else {
         toast.problem(t.uploadPartial(uploaded.length, failed.length));
@@ -52,21 +51,27 @@ export default function Uploader({ folderId, onUploaded }) {
         setDragging(false);
         send(e.dataTransfer.files);
       }}
-      className={`rounded-2xl border-2 border-dashed p-6 text-center transition-all duration-200 ${
-        dragging ? 'scale-[1.01] border-navy bg-navy/[0.06]' : 'border-hairline bg-surface/60'
+      className={`relative overflow-hidden rounded-2xl border-2 border-dashed p-6 text-center transition-all duration-200 ${
+        dragging
+          ? 'scale-[1.01] border-brass bg-brassSoft/50 shadow-lift'
+          : 'border-brass/35 bg-gradient-to-br from-surface via-brassSoft/20 to-navy/[0.04]'
       }`}
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -end-8 -top-10 h-28 w-28 rounded-full bg-brass/15 blur-2xl"
+      />
       <input ref={inputRef} type="file" multiple className="sr-only" onChange={(e) => send(e.target.files)} />
 
       {uploading ? (
-        <div className="py-1">
-          <p className="tabular flex items-center justify-center gap-2 text-[15px] font-semibold">
+        <div className="relative py-1">
+          <p className="tabular flex items-center justify-center gap-2 text-[15px] font-semibold text-navy">
             <Loader2 className="h-4 w-4 animate-spin" />
             {t.uploading} {count > 1 ? `(${count}) ` : ''}· {progress}%
           </p>
-          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-hairline">
+          <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-hairline">
             <motion.div
-              className="h-full rounded-full bg-navy"
+              className="h-full rounded-full bg-gradient-to-l from-navy to-brass"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ ease: 'easeOut', duration: 0.25 }}
@@ -74,14 +79,20 @@ export default function Uploader({ folderId, onUploaded }) {
           </div>
         </div>
       ) : (
-        <>
-          <UploadCloud className="mx-auto h-7 w-7 text-mute" aria-hidden="true" />
-          <p className="mt-3 text-[15px] text-graphite">{t.dropHere}</p>
-          <Button variant="quiet" className="mt-3" onClick={() => inputRef.current?.click()}>
-            {t.chooseFiles}
-          </Button>
+        <div className="relative">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-navy text-white shadow-card">
+            <UploadCloud className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <p className="mt-3 font-display text-[18px] text-navy">{t.dropHereTitle}</p>
+          <p className="mt-1 text-[14px] text-graphite">{t.dropHere}</p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Button variant="brass" onClick={() => inputRef.current?.click()}>
+              <FileUp className="h-4 w-4" />
+              {t.chooseFiles}
+            </Button>
+          </div>
           <p className="mt-3 text-[13px] text-mute">{t.uploadHint}</p>
-        </>
+        </div>
       )}
     </div>
   );

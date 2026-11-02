@@ -81,8 +81,17 @@ export const api = {
   checkSession: () => request('/api/auth/session', { auth: true }),
   listFolders: () => request('/api/folders'),
   getFolder: (id) => request(`/api/folders/${id}`),
-  createFolder: (name, description) =>
-    request('/api/folders', { method: 'POST', body: { name, description }, auth: true }),
+  createFolder: (name, description, extras = {}) =>
+    request('/api/folders', {
+      method: 'POST',
+      body: {
+        name,
+        description,
+        color: extras.color ?? null,
+        is_pinned: Boolean(extras.is_pinned),
+      },
+      auth: true,
+    }),
   updateFolder: (id, patch) =>
     request(`/api/folders/${id}`, { method: 'PATCH', body: patch, auth: true }),
   deleteFolder: (id) => request(`/api/folders/${id}`, { method: 'DELETE', auth: true }),

@@ -32,9 +32,16 @@ export default function UnlockDialog({ open, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title={t.unlockTitle}>
       <form onSubmit={submit} className="space-y-5">
-        <div className="flex gap-3 rounded-xl border border-hairline bg-raised p-3.5">
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brass" />
-          <p className="text-[14px] leading-relaxed text-graphite">{t.unlockBlurb}</p>
+        <div className="overflow-hidden rounded-2xl border border-brass/25 bg-gradient-to-br from-brassSoft/80 via-surface to-navy/[0.05] p-4">
+          <div className="flex gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brass text-white shadow-card">
+              <ShieldCheck className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-[15px] font-bold text-navy">{t.unlockTitle}</p>
+              <p className="mt-1 text-[14px] leading-relaxed text-graphite">{t.unlockBlurb}</p>
+            </div>
+          </div>
         </div>
         <Field
           label={t.passcode}
