@@ -1,22 +1,27 @@
 import { useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { FolderPlus, LayoutGrid, Search, ShieldCheck, Pin } from 'lucide-react';
+import { FolderPlus, GripVertical, LayoutGrid, Search, ShieldCheck, Pin } from 'lucide-react';
 import { useLocale } from '../context/LocaleContext.jsx';
 import FolderCard from './FolderCard.jsx';
 import { Button } from './ui.jsx';
 import Reveal from '../motion/Reveal.jsx';
 
-/** Teacher-only workspace: create folders and manage the full archive. */
+/** Teacher-only workspace: create folders, drag to reorder, manage archive. */
 export default function TeacherDesk({
   folders = [],
   onCreate,
   onSettings,
   onTogglePin,
+  onReorder,
 }) {
   const { t } = useLocale();
   const reduce = useReducedMotion();
   const [query, setQuery] = useState('');
   const [onlyPinned, setOnlyPinned] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
+  const filtering = Boolean(query.trim()) || onlyPinned;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -33,6 +38,46 @@ export default function TeacherDesk({
   const count = folders.length;
   const files = folders.reduce((sum, f) => sum + (f.fileCount || 0), 0);
   const pinnedCount = folders.filter((f) => f.is_pinned).length;
+  const canDrag = !filtering && typeof onReorder === 'function';
+
+  function handleDragStart(e, folder) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', folder.id);
+    setDraggingId(folder.id);
+  }
+
+  function handleDragOver(e, folder) {
+    if (!canDrag || !draggingId || draggingId === folder.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverId(folder.id);
+  }
+
+  function handleDragLeave(folder) {
+    if (overId === folder.id) setOverId(null);
+  }
+
+  function handleDrop(e, target) {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain') || draggingId;
+    setOverId(null);
+    setDraggingId(null);
+    if (!sourceId || sourceId === target.id || !canDrag) return;
+
+    const ids = folders.map((f) => f.id);
+    const from = ids.indexOf(sourceId);
+    const to = ids.indexOf(target.id);
+    if (from < 0 || to < 0) return;
+    const next = [...ids];
+    next.splice(from, 1);
+    next.splice(to, 0, sourceId);
+    onReorder(next);
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setOverId(null);
+  }
 
   return (
     <section
@@ -96,6 +141,13 @@ export default function TeacherDesk({
           </button>
         </div>
 
+        {canDrag && (
+          <p className="mt-4 inline-flex items-center gap-2 rounded-xl border border-navy/10 bg-surface/80 px-3 py-2 text-[13px] font-semibold text-graphite">
+            <GripVertical className="h-4 w-4 text-brass" />
+            {t.teacherReorderHint}
+          </p>
+        )}
+
         <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
           <motion.button
             type="button"
@@ -116,16 +168,29 @@ export default function TeacherDesk({
           {filtered.map((folder, index) => (
             <motion.div
               key={folder.id}
+              layout={!draggingId}
               initial={reduce ? false : { opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.15 }}
               transition={{
                 duration: 0.45,
-                delay: Math.min((index + 1) * 0.05, 0.4),
+                delay: draggingId ? 0 : Math.min((index + 1) * 0.05, 0.4),
                 ease: [0.16, 1, 0.3, 1],
               }}
             >
-              <FolderCard folder={folder} onSettings={onSettings} onTogglePin={onTogglePin} />
+              <FolderCard
+                folder={folder}
+                onSettings={onSettings}
+                onTogglePin={onTogglePin}
+                draggable={canDrag}
+                dragging={draggingId === folder.id}
+                dragOver={overId === folder.id}
+                onDragStart={(e) => handleDragStart(e, folder)}
+                onDragOver={(e) => handleDragOver(e, folder)}
+                onDragLeave={() => handleDragLeave(folder)}
+                onDrop={(e) => handleDrop(e, folder)}
+                onDragEnd={handleDragEnd}
+              />
             </motion.div>
           ))}
         </div>

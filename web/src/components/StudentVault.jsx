@@ -30,13 +30,8 @@ export default function StudentVault({ folders = [] }) {
   const reduce = useReducedMotion();
   const [query, setQuery] = useState('');
 
-  const featured = useMemo(
-    () =>
-      [...folders]
-        .sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned) || b.fileCount - a.fileCount)
-        .slice(0, 4),
-    [folders]
-  );
+  // Trust the server/manual order — first folders are the main doors.
+  const featured = useMemo(() => folders.slice(0, 4), [folders]);
   const featuredIds = useMemo(() => new Set(featured.map((f) => f.id)), [featured]);
 
   const filtered = useMemo(() => {

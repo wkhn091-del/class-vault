@@ -24,8 +24,7 @@ export default function Hero({ folders = [], folderCount = 0, fileCount = 0 }) {
   const reduce = useReducedMotion();
 
   const stack = (folders.length
-    ? [...folders]
-        .sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned) || b.fileCount - a.fileCount)
+    ? folders
         .slice(0, 3)
         .map((f) => ({ name: f.name, color: f.color || tabColor(f.name), id: f.id }))
     : FALLBACK_STACK

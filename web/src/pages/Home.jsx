@@ -17,8 +17,9 @@ import Hero from '../components/Hero.jsx';
 import TeacherHero from '../components/TeacherHero.jsx';
 import StickyDoorsCta from '../components/StickyDoorsCta.jsx';
 
-const byPinThenName = (a, b) =>
-  Number(b.is_pinned) - Number(a.is_pinned) || a.name.localeCompare(b.name, 'he');
+/** Keep the server's manual order; only fall back if sort_order is missing. */
+const bySortOrder = (a, b) =>
+  (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9) || a.name.localeCompare(b.name, 'he');
 
 const STEP_ICONS = [BookOpen, Download, KeyRound];
 
@@ -35,7 +36,7 @@ export default function Home() {
     setFolders((current) =>
       (current ?? [])
         .map((f) => (f.id === updated.id ? { ...f, ...updated } : f))
-        .sort(byPinThenName)
+        .sort(bySortOrder)
     );
 
   async function togglePin(folder) {
@@ -46,6 +47,24 @@ export default function Home() {
       applyUpdate(saved);
     } catch (err) {
       applyUpdate(folder);
+      toast.problem(err.message);
+    }
+  }
+
+  async function reorderFolders(ids) {
+    const previous = folders;
+    const rank = new Map(ids.map((id, i) => [id, i]));
+    setFolders((current) =>
+      [...(current ?? [])]
+        .map((f) => ({ ...f, sort_order: rank.has(f.id) ? rank.get(f.id) : f.sort_order }))
+        .sort(bySortOrder)
+    );
+    try {
+      const saved = await api.reorderFolders(ids);
+      setFolders(saved);
+      toast.ok(t.folderReordered);
+    } catch (err) {
+      setFolders(previous);
       toast.problem(err.message);
     }
   }
@@ -69,7 +88,7 @@ export default function Home() {
 
   const totalFiles = folders?.reduce((sum, f) => sum + f.fileCount, 0) ?? 0;
   const folderCount = folders?.length ?? 0;
-  const managedFolders = folders ? [...folders].sort(byPinThenName) : [];
+  const managedFolders = folders ? [...folders].sort(bySortOrder) : [];
 
   return (
     <>
@@ -113,6 +132,7 @@ export default function Home() {
           onCreate={() => setCreating(true)}
           onSettings={setEditing}
           onTogglePin={togglePin}
+          onReorder={reorderFolders}
         />
       )}
 
@@ -226,7 +246,9 @@ export default function Home() {
         open={creating}
         onClose={() => setCreating(false)}
         onCreated={(folder) =>
-          setFolders((current) => [...(current ?? []), folder].sort(byPinThenName))
+          setFolders((current) =>
+            [...(current ?? []), { ...folder, sort_order: (current?.length ?? 0) }].sort(bySortOrder)
+          )
         }
       />
 

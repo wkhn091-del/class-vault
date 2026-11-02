@@ -94,6 +94,8 @@ export const api = {
     }),
   updateFolder: (id, patch) =>
     request(`/api/folders/${id}`, { method: 'PATCH', body: patch, auth: true }),
+  reorderFolders: (ids) =>
+    request('/api/folders/reorder', { method: 'PUT', body: { ids }, auth: true }),
   deleteFolder: (id) => request(`/api/folders/${id}`, { method: 'DELETE', auth: true }),
   fileLink: (id, { download = false } = {}) =>
     request(`/api/files/${id}/link${download ? '?download=1' : ''}`),
