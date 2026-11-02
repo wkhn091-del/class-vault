@@ -64,11 +64,11 @@ router.get(
 );
 
 /**
- * POST /api/folders/reorder — admin.
+ * PUT /api/folders/reorder — admin.
  * Body: { ids: string[] } full ordered list of folder ids.
  * Must be registered before /:id routes.
  */
-router.post(
+router.put(
   '/reorder',
   requireAdmin,
   wrap(async (req, res) => {
@@ -100,11 +100,10 @@ router.post(
 );
 
 /**
- * POST /api/folders/:id/reorder-files — admin.
+ * PUT /api/folders/:id/reorder-files — admin.
  * Body: { ids: string[] } full ordered list of file ids in this folder.
- * Uses POST (same as other folder-scoped writes) so Vercel routing stays reliable.
  */
-router.post(
+router.put(
   '/:id/reorder-files',
   requireAdmin,
   wrap(async (req, res) => {
