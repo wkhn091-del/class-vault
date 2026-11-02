@@ -176,9 +176,10 @@ router.get(
       req.query.mode === 'download';
     const signOpts = forceDownload ? { download: file.name } : undefined;
 
+    // 30 minutes — Office/Google viewers fetch later from their servers.
     const { data, error: signError } = await supabase.storage
       .from(getBucket())
-      .createSignedUrl(file.storage_path, 300, signOpts);
+      .createSignedUrl(file.storage_path, 1800, signOpts);
     if (signError) throw new HttpError(500, signError.message);
 
     res.json({ url: data.signedUrl, name: file.name, mimeType: file.mime_type });

@@ -157,6 +157,8 @@ const he = {
   officeNeedsPublic:
     'תצוגה מקדימה של קובצי Office דורשת שרת שזמין באינטרנט. בהרצה מקומית זה לא יעבוד — אפשר להוריד את הקובץ, או לנסות שוב אחרי העלאה ל-Render.',
   officeSlow: 'הטעינה לוקחת זמן? אפשר לנסות מציג אחר.',
+  officeHint: 'לא נפתח? אפשר להחליף מציג או להוריד.',
+  officeFailed: 'לא הצלחנו לפתוח תצוגה מקדימה. אפשר להוריד את הקובץ.',
   viewerMicrosoft: 'מציג Microsoft',
   viewerGoogle: 'מציג Google',
   rows: (n) => `${n} שורות`,
@@ -339,6 +341,8 @@ const en = {
   officeNeedsPublic:
     "Office previews need a backend that's reachable from the internet. They won't work against localhost — download the file, or try again once the API is deployed.",
   officeSlow: 'Taking a while? Try the other viewer.',
+  officeHint: "Won't open? Switch viewer or download.",
+  officeFailed: "Couldn't open a preview. You can download the file.",
   viewerMicrosoft: 'Microsoft viewer',
   viewerGoogle: 'Google viewer',
   rows: (n) => `${n} rows`,
