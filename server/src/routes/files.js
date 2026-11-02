@@ -6,12 +6,7 @@ import { buildStoragePath, tidyDisplayName, mapWithLimit } from '../lib/storage.
 import { resolveContentType } from '../lib/mime.js';
 import { describeStorageError } from '../middleware/error.js';
 import { badRequest, notFound, wrap, HttpError } from '../lib/errors.js';
-import {
-  prependFileOrder,
-  removeFileOrder,
-  sortFilesByOrder,
-  writeFileOrder,
-} from '../lib/fileOrder.js';
+import { prependFileOrder, removeFileOrder } from '../lib/fileOrder.js';
 
 const router = Router();
 
@@ -169,49 +164,6 @@ router.post(
       console.warn('Could not update file order after upload:', err.message || err);
     }
     res.status(201).json({ uploaded, failed });
-  })
-);
-
-/**
- * PUT /api/files/folder/:folderId/reorder — admin.
- * Body: { ids: string[] } full ordered list of file ids in this folder.
- */
-router.put(
-  '/folder/:folderId/reorder',
-  requireAdmin,
-  wrap(async (req, res) => {
-    const { folderId } = req.params;
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
-    if (!ids?.length) throw badRequest('Send the full file order as ids.');
-
-    const { data: folder, error } = await supabase
-      .from('folders')
-      .select('id')
-      .eq('id', folderId)
-      .maybeSingle();
-    if (error) throw new HttpError(500, error.message);
-    if (!folder) throw notFound('That folder does not exist.');
-
-    const { data: files, error: filesError } = await supabase
-      .from('files')
-      .select('id, name, mime_type, size_bytes, created_at')
-      .eq('folder_id', folderId);
-    if (filesError) throw new HttpError(500, filesError.message);
-
-    const existing = new Set(files.map((f) => String(f.id)));
-    const unique = [];
-    const seen = new Set();
-    for (const id of ids) {
-      if (!existing.has(id) || seen.has(id)) continue;
-      seen.add(id);
-      unique.push(id);
-    }
-    for (const id of existing) {
-      if (!seen.has(id)) unique.push(id);
-    }
-
-    await writeFileOrder(folderId, unique);
-    res.json(sortFilesByOrder(files, unique));
   })
 );
 

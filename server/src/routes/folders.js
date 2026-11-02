@@ -9,7 +9,12 @@ import {
   sortFoldersByOrder,
   writeFolderOrder,
 } from '../lib/folderOrder.js';
-import { clearFileOrder, readFileOrder, sortFilesByOrder } from '../lib/fileOrder.js';
+import {
+  clearFileOrder,
+  readFileOrder,
+  sortFilesByOrder,
+  writeFileOrder,
+} from '../lib/fileOrder.js';
 
 const router = Router();
 
@@ -59,11 +64,11 @@ router.get(
 );
 
 /**
- * PUT /api/folders/reorder — admin.
+ * POST /api/folders/reorder — admin.
  * Body: { ids: string[] } full ordered list of folder ids.
  * Must be registered before /:id routes.
  */
-router.put(
+router.post(
   '/reorder',
   requireAdmin,
   wrap(async (req, res) => {
@@ -91,6 +96,50 @@ router.put(
     const { data: all, error: listError } = await supabase.from('folders').select(COLUMNS);
     if (listError) throw new HttpError(500, listError.message);
     res.json(await withStats(sortFoldersByOrder(all, unique)));
+  })
+);
+
+/**
+ * POST /api/folders/:id/reorder-files — admin.
+ * Body: { ids: string[] } full ordered list of file ids in this folder.
+ * Uses POST (same as other folder-scoped writes) so Vercel routing stays reliable.
+ */
+router.post(
+  '/:id/reorder-files',
+  requireAdmin,
+  wrap(async (req, res) => {
+    const folderId = req.params.id;
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    if (!ids?.length) throw badRequest('Send the full file order as ids.');
+
+    const { data: folder, error } = await supabase
+      .from('folders')
+      .select('id')
+      .eq('id', folderId)
+      .maybeSingle();
+    if (error) throw new HttpError(500, error.message);
+    if (!folder) throw notFound('That folder does not exist.');
+
+    const { data: files, error: filesError } = await supabase
+      .from('files')
+      .select('id, name, mime_type, size_bytes, created_at')
+      .eq('folder_id', folderId);
+    if (filesError) throw new HttpError(500, filesError.message);
+
+    const existing = new Set(files.map((f) => String(f.id)));
+    const unique = [];
+    const seen = new Set();
+    for (const id of ids) {
+      if (!existing.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      unique.push(id);
+    }
+    for (const id of existing) {
+      if (!seen.has(id)) unique.push(id);
+    }
+
+    await writeFileOrder(folderId, unique);
+    res.json(sortFilesByOrder(files, unique));
   })
 );
 
