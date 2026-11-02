@@ -35,7 +35,7 @@ export default function OfficeView({ file }) {
       <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-5 p-10 text-center">
         <Globe className="h-8 w-8 text-mute" />
         <p className="max-w-md text-[15px] leading-relaxed text-graphite">{t.officeNeedsPublic}</p>
-        <Button onClick={() => window.location.assign(api.downloadUrl(file.id))}>
+        <Button onClick={() => api.download(file.id).catch(() => {})}>
           <Download className="h-4 w-4" />
           {t.download}
         </Button>

@@ -4,6 +4,7 @@ import { X, Download, ExternalLink, Loader2 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { previewKind, formatBytes } from '../lib/format.js';
 import { useLocale } from '../context/LocaleContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { Button } from './ui.jsx';
 import CodeView from './CodeView.jsx';
 import SheetView from './SheetView.jsx';
@@ -16,8 +17,10 @@ const NEEDS_NOTHING = new Set(['office']);
 
 export default function Previewer({ file, onClose }) {
   const [state, setState] = useState({ status: 'loading' });
+  const [acting, setActing] = useState(false);
   const reduce = useReducedMotion();
   const { t, locale } = useLocale();
+  const toast = useToast();
   const kind = file ? previewKind(file.mime_type, file.name) : 'none';
 
   useEffect(() => {
@@ -72,6 +75,30 @@ export default function Previewer({ file, onClose }) {
     };
   }, [file, onClose]);
 
+  async function handleDownload() {
+    if (!file || acting) return;
+    setActing(true);
+    try {
+      await api.download(file.id);
+    } catch (err) {
+      toast.problem(err.message);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleOpenTab() {
+    if (!file || acting) return;
+    setActing(true);
+    try {
+      await api.openInTab(file.id);
+    } catch (err) {
+      toast.problem(err.message);
+    } finally {
+      setActing(false);
+    }
+  }
+
   const ready = state.status === 'ready';
 
   return (
@@ -91,24 +118,27 @@ export default function Previewer({ file, onClose }) {
             </div>
 
             {ready && (kind === 'html' || kind === 'pdf') && (
-              <a
-                href={kind === 'html' ? api.rawUrl(file.id, file.name) : state.url}
-                target="_blank"
-                rel="noreferrer noopener"
+              <button
+                type="button"
+                onClick={handleOpenTab}
+                disabled={acting}
                 aria-label={t.openInTab}
-                className="rounded-xl p-2.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                className="rounded-xl p-2.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
               >
                 <ExternalLink className="h-[18px] w-[18px]" />
-              </a>
+              </button>
             )}
-            <a
-              href={api.downloadUrl(file.id)}
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={acting}
               aria-label={t.download}
-              className="rounded-xl p-2.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-xl p-2.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
             >
               <Download className="h-[18px] w-[18px]" />
-            </a>
+            </button>
             <button
+              type="button"
               onClick={onClose}
               aria-label={t.close}
               className="rounded-xl p-2.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
@@ -175,7 +205,7 @@ export default function Previewer({ file, onClose }) {
               {ready && kind === 'none' && (
                 <div className="p-12 text-center">
                   <p className="text-[15px] text-graphite">{t.noPreview}</p>
-                  <Button className="mt-5" onClick={() => window.location.assign(api.downloadUrl(file.id))}>
+                  <Button className="mt-5" onClick={handleDownload} disabled={acting}>
                     <Download className="h-4 w-4" />
                     {t.download}
                   </Button>

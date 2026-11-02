@@ -92,13 +92,20 @@ export default function FileRow({ file, onPreview, onDeleted }) {
             <Eye className="h-[18px] w-[18px]" />
           </button>
         )}
-        <a
-          href={api.downloadUrl(file.id)}
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await api.download(file.id);
+            } catch (err) {
+              toast.problem(err.message);
+            }
+          }}
           aria-label={`${t.download}: ${file.name}`}
           className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-navy/10 hover:text-navy"
         >
           <Download className="h-[18px] w-[18px]" />
-        </a>
+        </button>
         {isAdmin && (
           <button
             onClick={remove}

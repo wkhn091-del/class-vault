@@ -86,7 +86,8 @@ export const api = {
   updateFolder: (id, patch) =>
     request(`/api/folders/${id}`, { method: 'PATCH', body: patch, auth: true }),
   deleteFolder: (id) => request(`/api/folders/${id}`, { method: 'DELETE', auth: true }),
-  fileLink: (id) => request(`/api/files/${id}/link`),
+  fileLink: (id, { download = false } = {}) =>
+    request(`/api/files/${id}/link${download ? '?download=1' : ''}`),
   renameFile: (id, name) =>
     request(`/api/files/${id}`, { method: 'PATCH', body: { name }, auth: true }),
   deleteFile: (id) => request(`/api/files/${id}`, { method: 'DELETE', auth: true }),
@@ -96,6 +97,18 @@ export const api = {
     return match
       ? `${BASE}/api/files/${id}/raw/file.${match[1].toLowerCase()}`
       : `${BASE}/api/files/${id}/raw`;
+  },
+  /**
+   * Resolve a Supabase signed URL via JSON, then click it.
+   * Avoids same-origin /api navigations that Chrome's service worker breaks.
+   */
+  async download(id) {
+    const { url, name } = await this.fileLink(id, { download: true });
+    clickAnchor(url, { downloadName: name });
+  },
+  async openInTab(id) {
+    const { url } = await this.fileLink(id);
+    clickAnchor(url, { newTab: true });
   },
   /**
    * Sign → PUT straight to Supabase → complete DB rows.
@@ -175,4 +188,17 @@ async function mapPool(items, limit, task) {
     }
   });
   await Promise.all(workers);
+}
+
+function clickAnchor(url, { downloadName, newTab } = {}) {
+  const a = document.createElement('a');
+  a.href = url;
+  if (downloadName) a.setAttribute('download', downloadName);
+  if (newTab) {
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+  }
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }

@@ -59,11 +59,10 @@ export default defineConfig({
       workbox: {
         // Static shell only — never cache API / admin responses (Script 3 PWA rule).
         navigateFallback: '/index.html',
+        // Chrome + Workbox: without this, <a href="/api/.../download"> navigations
+        // get the SPA shell (or a SW-mediated redirect) and download / open-in-tab break.
+        navigateFallbackDenylist: [/^\/api\//, /^\/health$/],
         runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
-            handler: 'NetworkOnly',
-          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',

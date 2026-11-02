@@ -158,7 +158,7 @@ router.post(
   })
 );
 
-/** GET /api/files/:id/link?mode=inline — public. Signed URL, good for 5 minutes. */
+/** GET /api/files/:id/link?download=1 — public. Signed URL, good for 5 minutes. */
 router.get(
   '/:id/link',
   wrap(async (req, res) => {
@@ -170,9 +170,15 @@ router.get(
     if (error) throw new HttpError(500, error.message);
     if (!file) throw notFound('That file is no longer here.');
 
+    const forceDownload =
+      req.query.download === '1' ||
+      req.query.download === 'true' ||
+      req.query.mode === 'download';
+    const signOpts = forceDownload ? { download: file.name } : undefined;
+
     const { data, error: signError } = await supabase.storage
       .from(getBucket())
-      .createSignedUrl(file.storage_path, 300);
+      .createSignedUrl(file.storage_path, 300, signOpts);
     if (signError) throw new HttpError(500, signError.message);
 
     res.json({ url: data.signedUrl, name: file.name, mimeType: file.mime_type });
