@@ -101,6 +101,12 @@ export const api = {
     request(`/api/files/${id}/link${download ? '?download=1' : ''}`),
   renameFile: (id, name) =>
     request(`/api/files/${id}`, { method: 'PATCH', body: { name }, auth: true }),
+  reorderFiles: (folderId, ids) =>
+    request(`/api/files/folder/${folderId}/reorder`, {
+      method: 'PUT',
+      body: { ids },
+      auth: true,
+    }),
   deleteFile: (id) => request(`/api/files/${id}`, { method: 'DELETE', auth: true }),
   downloadUrl: (id) => `${BASE}/api/files/${id}/download`,
   rawUrl(id, name = '') {

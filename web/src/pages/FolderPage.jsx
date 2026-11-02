@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Search, Trash2, Settings2, Pin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, GripVertical, Search, Trash2, Settings2, Pin } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAdmin } from '../context/AdminContext.jsx';
 import { useLocale } from '../context/LocaleContext.jsx';
@@ -25,6 +25,8 @@ export default function FolderPage() {
   const [query, setQuery] = useState('');
   const [previewing, setPreviewing] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const [overId, setOverId] = useState(null);
 
   useEffect(() => {
     setFolder(null);
@@ -32,12 +34,14 @@ export default function FolderPage() {
     api.getFolder(id).then(setFolder).catch((err) => setError(err.message));
   }, [id]);
 
+  const searching = Boolean(query.trim());
   const files = useMemo(() => {
     if (!folder) return [];
     const q = query.trim().toLowerCase();
     return q ? folder.files.filter((f) => f.name.toLowerCase().includes(q)) : folder.files;
   }, [folder, query]);
 
+  const canDrag = isAdmin && !searching && (folder?.files.length ?? 0) > 1;
   const totalBytes = folder?.files.reduce((sum, f) => sum + Number(f.size_bytes), 0) ?? 0;
   const BackArrow = isRtl ? ChevronRight : ChevronLeft;
 
@@ -50,6 +54,64 @@ export default function FolderPage() {
     } catch (err) {
       toast.problem(err.message);
     }
+  }
+
+  async function reorderFiles(ids) {
+    const previous = folder;
+    const rank = new Map(ids.map((fileId, i) => [fileId, i]));
+    setFolder((current) => ({
+      ...current,
+      files: [...current.files].sort(
+        (a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9)
+      ),
+    }));
+    try {
+      const saved = await api.reorderFiles(folder.id, ids);
+      setFolder((current) => ({ ...current, files: saved }));
+      toast.ok(t.fileReordered);
+    } catch (err) {
+      setFolder(previous);
+      toast.problem(err.message);
+    }
+  }
+
+  function handleDragStart(e, file) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', file.id);
+    setDraggingId(file.id);
+  }
+
+  function handleDragOver(e, file) {
+    if (!canDrag || !draggingId || draggingId === file.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverId(file.id);
+  }
+
+  function handleDragLeave(file) {
+    if (overId === file.id) setOverId(null);
+  }
+
+  function handleDrop(e, target) {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain') || draggingId;
+    setOverId(null);
+    setDraggingId(null);
+    if (!sourceId || sourceId === target.id || !canDrag || !folder) return;
+
+    const ids = folder.files.map((f) => f.id);
+    const from = ids.indexOf(sourceId);
+    const to = ids.indexOf(target.id);
+    if (from < 0 || to < 0) return;
+    const next = [...ids];
+    next.splice(from, 1);
+    next.splice(to, 0, sourceId);
+    reorderFiles(next);
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setOverId(null);
   }
 
   if (error) {
@@ -164,27 +226,43 @@ export default function FolderPage() {
       ) : files.length === 0 ? (
         <EmptyState title={t.noMatches}>{t.noMatchesNote}</EmptyState>
       ) : (
-        <ul className="overflow-hidden rounded-2xl border border-navy/10 bg-gradient-to-b from-surface to-raised shadow-card">
-          {files.map((file) => (
-            <FileRow
-              key={file.id}
-              file={file}
-              onPreview={setPreviewing}
-              onDeleted={(fileId) =>
-                setFolder((current) => ({
-                  ...current,
-                  files: current.files.filter((f) => f.id !== fileId),
-                }))
-              }
-              onRenamed={(updated) =>
-                setFolder((current) => ({
-                  ...current,
-                  files: current.files.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)),
-                }))
-              }
-            />
-          ))}
-        </ul>
+        <>
+          {canDrag && (
+            <p className="mb-3 inline-flex items-center gap-2 rounded-xl border border-navy/10 bg-surface/90 px-3 py-2 text-[13px] font-semibold text-graphite">
+              <GripVertical className="h-4 w-4 text-brass" />
+              {t.fileReorderHint}
+            </p>
+          )}
+          <ul className="overflow-hidden rounded-2xl border border-navy/10 bg-gradient-to-b from-surface to-raised shadow-card">
+            {files.map((file) => (
+              <FileRow
+                key={file.id}
+                file={file}
+                onPreview={setPreviewing}
+                onDeleted={(fileId) =>
+                  setFolder((current) => ({
+                    ...current,
+                    files: current.files.filter((f) => f.id !== fileId),
+                  }))
+                }
+                onRenamed={(updated) =>
+                  setFolder((current) => ({
+                    ...current,
+                    files: current.files.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)),
+                  }))
+                }
+                draggable={canDrag}
+                dragging={draggingId === file.id}
+                dragOver={overId === file.id}
+                onDragStart={(e) => handleDragStart(e, file)}
+                onDragOver={(e) => handleDragOver(e, file)}
+                onDragLeave={() => handleDragLeave(file)}
+                onDrop={(e) => handleDrop(e, file)}
+                onDragEnd={handleDragEnd}
+              />
+            ))}
+          </ul>
+        </>
       )}
 
       <FolderSettingsDialog

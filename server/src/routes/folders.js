@@ -9,6 +9,7 @@ import {
   sortFoldersByOrder,
   writeFolderOrder,
 } from '../lib/folderOrder.js';
+import { clearFileOrder, readFileOrder, sortFilesByOrder } from '../lib/fileOrder.js';
 
 const router = Router();
 
@@ -108,11 +109,11 @@ router.get(
     const { data: files, error: filesError } = await supabase
       .from('files')
       .select('id, name, mime_type, size_bytes, created_at')
-      .eq('folder_id', folder.id)
-      .order('created_at', { ascending: false });
+      .eq('folder_id', folder.id);
     if (filesError) throw new HttpError(500, filesError.message);
 
-    res.json({ ...folder, files });
+    const fileOrder = await readFileOrder(folder.id);
+    res.json({ ...folder, files: sortFilesByOrder(files, fileOrder) });
   })
 );
 
@@ -212,6 +213,11 @@ router.delete(
       await removeFolderOrder(req.params.id);
     } catch (err) {
       console.warn('Could not update folder order after delete:', err.message || err);
+    }
+    try {
+      await clearFileOrder(req.params.id);
+    } catch (err) {
+      console.warn('Could not clear file order after folder delete:', err.message || err);
     }
 
     res.status(204).end();

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Download, Eye, Trash2, FileText, Image, FileType2, Film, Music, Code2, File,
-  Table2, Presentation, FileSpreadsheet, FileType, Pencil, Check, X,
+  Table2, Presentation, FileSpreadsheet, FileType, Pencil, Check, X, GripVertical,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { formatBytes, formatDate, previewKind, extensionOf } from '../lib/format.js';
@@ -36,7 +36,20 @@ const TINTS = {
   none: 'bg-graphite/10 text-graphite',
 };
 
-export default function FileRow({ file, onPreview, onDeleted, onRenamed }) {
+export default function FileRow({
+  file,
+  onPreview,
+  onDeleted,
+  onRenamed,
+  draggable = false,
+  dragging = false,
+  dragOver = false,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+}) {
   const kind = previewKind(file.mime_type, file.name);
   const Icon = kind === 'office' ? officeIcon(file.name) : (ICONS[kind] ?? File);
   const tint = kind === 'office' ? officeTint(file.name) : (TINTS[kind] ?? TINTS.none);
@@ -84,8 +97,30 @@ export default function FileRow({ file, onPreview, onDeleted, onRenamed }) {
 
   return (
     <li
-      className={`group flex items-center gap-3.5 border-b border-hairline/70 px-3 py-3.5 transition-colors last:border-b-0 hover:bg-raised sm:px-4 ${busy ? 'pointer-events-none opacity-40' : ''}`}
+      className={`group flex items-center gap-2 border-b border-hairline/70 px-3 py-3.5 transition-colors last:border-b-0 hover:bg-raised sm:gap-3.5 sm:px-4 ${
+        busy ? 'pointer-events-none opacity-40' : ''
+      } ${dragging ? 'opacity-45 bg-brassSoft/40' : ''} ${
+        dragOver ? 'border-t-2 border-t-brass bg-brassSoft/30' : ''
+      }`}
+      onDragOver={draggable ? onDragOver : undefined}
+      onDragLeave={draggable ? onDragLeave : undefined}
+      onDrop={draggable ? onDrop : undefined}
     >
+      {draggable && (
+        <button
+          type="button"
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          aria-label={t.fileDragHandle}
+          title={t.fileDragHandle}
+          className="shrink-0 cursor-grab rounded-lg p-1.5 text-mute transition-colors hover:bg-navy/10 hover:text-navy active:cursor-grabbing"
+          onClick={(e) => e.preventDefault()}
+        >
+          <GripVertical className="h-[18px] w-[18px]" />
+        </button>
+      )}
+
       <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tint}`}>
         <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
       </span>
@@ -127,9 +162,12 @@ export default function FileRow({ file, onPreview, onDeleted, onRenamed }) {
         </div>
       ) : (
         <button
+          type="button"
           onClick={() => openable && onPreview(file)}
           disabled={!openable}
           className="min-w-0 flex-1 text-start disabled:cursor-default"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
         >
           <span className="ltr-run block truncate text-[15px] font-semibold leading-tight">{file.name}</span>
           <span className="tabular mt-1 block text-[13px] text-mute">
@@ -143,6 +181,7 @@ export default function FileRow({ file, onPreview, onDeleted, onRenamed }) {
         <div className="flex shrink-0 items-center gap-0.5">
           {openable && (
             <button
+              type="button"
               onClick={() => onPreview(file)}
               aria-label={`${t.preview}: ${file.name}`}
               className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-navy/10 hover:text-navy"
@@ -178,6 +217,7 @@ export default function FileRow({ file, onPreview, onDeleted, onRenamed }) {
                 <Pencil className="h-[18px] w-[18px]" />
               </button>
               <button
+                type="button"
                 onClick={remove}
                 aria-label={`${t.deleteFile}: ${file.name}`}
                 className="rounded-xl p-2.5 text-graphite transition-colors hover:bg-danger/10 hover:text-danger"
