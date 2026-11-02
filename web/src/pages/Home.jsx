@@ -1,20 +1,18 @@
 import { useEffect, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { BookOpen, Download, KeyRound, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAdmin } from '../context/AdminContext.jsx';
 import { useLocale } from '../context/LocaleContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import FolderCard from '../components/FolderCard.jsx';
 import FolderSettingsDialog from '../components/FolderSettingsDialog.jsx';
 import NewFolderDialog from '../components/NewFolderDialog.jsx';
 import TeacherDesk from '../components/TeacherDesk.jsx';
+import StudentVault from '../components/StudentVault.jsx';
 import { FolderGridSkeleton } from '../components/Skeletons.jsx';
 import { Button, EmptyState } from '../components/ui.jsx';
 import Reveal from '../motion/Reveal.jsx';
 import Counter from '../motion/Counter.jsx';
 import Marquee from '../motion/Marquee.jsx';
-import SubjectDoors from '../components/SubjectDoors.jsx';
 import Hero from '../components/Hero.jsx';
 import TeacherHero from '../components/TeacherHero.jsx';
 import StickyDoorsCta from '../components/StickyDoorsCta.jsx';
@@ -32,7 +30,6 @@ export default function Home() {
   const { isAdmin } = useAdmin();
   const { t } = useLocale();
   const toast = useToast();
-  const reduce = useReducedMotion();
 
   const applyUpdate = (updated) =>
     setFolders((current) =>
@@ -47,7 +44,6 @@ export default function Home() {
     try {
       const saved = await api.updateFolder(folder.id, { is_pinned: next });
       applyUpdate(saved);
-      toast.ok(next ? t.pinnedOn : t.pinnedOff);
     } catch (err) {
       applyUpdate(folder);
       toast.problem(err.message);
@@ -73,14 +69,6 @@ export default function Home() {
 
   const totalFiles = folders?.reduce((sum, f) => sum + f.fileCount, 0) ?? 0;
   const folderCount = folders?.length ?? 0;
-
-  const doorFolders = folders
-    ? [...folders]
-        .sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned) || b.fileCount - a.fileCount)
-        .slice(0, 4)
-    : [];
-  const doorIds = new Set(doorFolders.map((f) => f.id));
-  const archiveFolders = folders ? folders.filter((f) => !doorIds.has(f.id)) : [];
   const managedFolders = folders ? [...folders].sort(byPinThenName) : [];
 
   return (
@@ -92,7 +80,11 @@ export default function Home() {
           onCreate={() => setCreating(true)}
         />
       ) : (
-        <Hero />
+        <Hero
+          folders={folders ?? []}
+          folderCount={folderCount}
+          fileCount={totalFiles}
+        />
       )}
 
       {error && (
@@ -124,40 +116,8 @@ export default function Home() {
         />
       )}
 
-      {!isAdmin && doorFolders.length > 0 && <SubjectDoors folders={doorFolders} />}
-      {!isAdmin && doorFolders.length > 0 && <Marquee items={t.marqueeSubjects} />}
-
-      {!isAdmin && archiveFolders.length > 0 && (
-        <section
-          id="archive"
-          className="scroll-mt-24 bg-gradient-to-b from-canvas via-raised to-blue/[0.07] px-4 py-12 sm:px-6 sm:py-14"
-        >
-          <div className="mx-auto max-w-5xl">
-            <Reveal>
-              <h2 className="font-display text-[28px] text-navy sm:text-[36px]">{t.archiveMoreTitle}</h2>
-              <div className="mt-4 h-px w-20 brass-rule" />
-              <p className="mt-4 max-w-[48ch] text-[16px] text-graphite">{t.archiveMoreLead}</p>
-            </Reveal>
-            <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-              {archiveFolders.map((folder, index) => (
-                <motion.div
-                  key={folder.id}
-                  initial={reduce ? false : { opacity: 0, y: 18, rotate: -0.4 }}
-                  whileInView={{ opacity: 1, y: 0, rotate: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{
-                    duration: 0.55,
-                    delay: Math.min(index * 0.06, 0.45),
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                >
-                  <FolderCard folder={folder} onSettings={setEditing} onTogglePin={togglePin} />
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {!isAdmin && folders && folders.length > 0 && <StudentVault folders={folders} />}
+      {!isAdmin && folders && folders.length > 0 && <Marquee items={t.marqueeSubjects} />}
 
       {!isAdmin && (
         <section className="px-4 py-12 sm:px-6 sm:py-14">
@@ -260,7 +220,7 @@ export default function Home() {
         </section>
       )}
 
-      {!isAdmin && doorFolders.length > 0 && <StickyDoorsCta />}
+      {!isAdmin && folders && folders.length > 0 && <StickyDoorsCta />}
 
       <NewFolderDialog
         open={creating}
