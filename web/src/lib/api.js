@@ -102,9 +102,9 @@ export const api = {
   renameFile: (id, name) =>
     request(`/api/files/${id}`, { method: 'PATCH', body: { name }, auth: true }),
   reorderFiles: (folderId, ids) =>
-    request(`/api/folders/${folderId}/reorder-files`, {
+    request('/api/folders/reorder-files', {
       method: 'PUT',
-      body: { ids },
+      body: { folderId, ids },
       auth: true,
     }),
   deleteFile: (id) => request(`/api/files/${id}`, { method: 'DELETE', auth: true }),

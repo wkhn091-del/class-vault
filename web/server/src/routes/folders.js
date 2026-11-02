@@ -2,16 +2,24 @@ import { Router } from 'express';
 import { supabase, getBucket } from '../lib/supabase.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { badRequest, notFound, wrap, HttpError } from '../lib/errors.js';
+import {
+  appendFolderOrder,
+  readFolderOrder,
+  removeFolderOrder,
+  sortFoldersByOrder,
+  writeFolderOrder,
+} from '../lib/folderOrder.js';
+import {
+  clearFileOrder,
+  readFileOrder,
+  sortFilesByOrder,
+  writeFileOrder,
+} from '../lib/fileOrder.js';
 
 const router = Router();
 
 const COLUMNS = 'id, name, description, is_pinned, color, created_at';
 const HEX = /^#[0-9a-fA-F]{6}$/;
-
-/** Pinned first, then alphabetical — matches the index on the table. */
-function applyOrder(query) {
-  return query.order('is_pinned', { ascending: false }).order('name', { ascending: true });
-}
 
 function readColor(value) {
   if (value === null || value === '') return null;
@@ -20,33 +28,119 @@ function readColor(value) {
   return color.toLowerCase();
 }
 
-/** GET /api/folders — public. */
+async function withStats(folders) {
+  const { data: files, error: filesError } = await supabase
+    .from('files')
+    .select('folder_id, size_bytes, created_at');
+  if (filesError) throw new HttpError(500, filesError.message);
+
+  const stats = new Map();
+  for (const f of files) {
+    const s = stats.get(f.folder_id) ?? { fileCount: 0, totalBytes: 0, updatedAt: null };
+    s.fileCount += 1;
+    s.totalBytes += Number(f.size_bytes) || 0;
+    if (!s.updatedAt || f.created_at > s.updatedAt) s.updatedAt = f.created_at;
+    stats.set(f.folder_id, s);
+  }
+
+  return folders.map((folder, index) => ({
+    ...folder,
+    sort_order: index,
+    ...(stats.get(folder.id) ?? { fileCount: 0, totalBytes: 0, updatedAt: null }),
+  }));
+}
+
+/** GET /api/folders — public. Manual order when set; otherwise pin + name. */
 router.get(
   '/',
   wrap(async (_req, res) => {
-    const { data: folders, error } = await applyOrder(supabase.from('folders').select(COLUMNS));
+    const { data: folders, error } = await supabase.from('folders').select(COLUMNS);
     if (error) throw new HttpError(500, error.message);
+
+    const order = await readFolderOrder();
+    const sorted = sortFoldersByOrder(folders, order);
+    res.json(await withStats(sorted));
+  })
+);
+
+/**
+ * PUT /api/folders/reorder — admin.
+ * Body: { ids: string[] } full ordered list of folder ids.
+ * Must be registered before /:id routes.
+ */
+router.put(
+  '/reorder',
+  requireAdmin,
+  wrap(async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    if (!ids?.length) throw badRequest('Send the full folder order as ids.');
+
+    const { data: folders, error } = await supabase.from('folders').select('id');
+    if (error) throw new HttpError(500, error.message);
+
+    const existing = new Set(folders.map((f) => String(f.id)));
+    const unique = [];
+    const seen = new Set();
+    for (const id of ids) {
+      if (!existing.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      unique.push(id);
+    }
+    // Append any folders the client omitted so nothing disappears from order.
+    for (const id of existing) {
+      if (!seen.has(id)) unique.push(id);
+    }
+
+    await writeFolderOrder(unique);
+
+    const { data: all, error: listError } = await supabase.from('folders').select(COLUMNS);
+    if (listError) throw new HttpError(500, listError.message);
+    res.json(await withStats(sortFoldersByOrder(all, unique)));
+  })
+);
+
+/**
+ * PUT /api/folders/reorder-files — admin.
+ * Body: { folderId: string, ids: string[] }
+ * Flat path (same style as /reorder) — nested /:id/... routes 404 on Vercel rewrite.
+ */
+router.put(
+  '/reorder-files',
+  requireAdmin,
+  wrap(async (req, res) => {
+    const folderId = String(req.body?.folderId || '').trim();
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    if (!folderId) throw badRequest('Missing folderId.');
+    if (!ids?.length) throw badRequest('Send the full file order as ids.');
+
+    const { data: folder, error } = await supabase
+      .from('folders')
+      .select('id')
+      .eq('id', folderId)
+      .maybeSingle();
+    if (error) throw new HttpError(500, error.message);
+    if (!folder) throw notFound('That folder does not exist.');
 
     const { data: files, error: filesError } = await supabase
       .from('files')
-      .select('folder_id, size_bytes, created_at');
+      .select('id, name, mime_type, size_bytes, created_at')
+      .eq('folder_id', folderId);
     if (filesError) throw new HttpError(500, filesError.message);
 
-    const stats = new Map();
-    for (const f of files) {
-      const s = stats.get(f.folder_id) ?? { fileCount: 0, totalBytes: 0, updatedAt: null };
-      s.fileCount += 1;
-      s.totalBytes += Number(f.size_bytes) || 0;
-      if (!s.updatedAt || f.created_at > s.updatedAt) s.updatedAt = f.created_at;
-      stats.set(f.folder_id, s);
+    const existing = new Set(files.map((f) => String(f.id)));
+    const unique = [];
+    const seen = new Set();
+    for (const id of ids) {
+      if (!existing.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      unique.push(id);
+    }
+    for (const id of existing) {
+      if (!seen.has(id)) unique.push(id);
     }
 
-    res.json(
-      folders.map((folder) => ({
-        ...folder,
-        ...(stats.get(folder.id) ?? { fileCount: 0, totalBytes: 0, updatedAt: null }),
-      }))
-    );
+    await writeFileOrder(folderId, unique);
+    res.json(sortFilesByOrder(files, unique));
   })
 );
 
@@ -65,11 +159,11 @@ router.get(
     const { data: files, error: filesError } = await supabase
       .from('files')
       .select('id, name, mime_type, size_bytes, created_at')
-      .eq('folder_id', folder.id)
-      .order('created_at', { ascending: false });
+      .eq('folder_id', folder.id);
     if (filesError) throw new HttpError(500, filesError.message);
 
-    res.json({ ...folder, files });
+    const fileOrder = await readFileOrder(folder.id);
+    res.json({ ...folder, files: sortFilesByOrder(files, fileOrder) });
   })
 );
 
@@ -93,7 +187,13 @@ router.post(
     if (error?.code === '23505') throw badRequest('A folder with that name already exists.');
     if (error) throw new HttpError(500, error.message);
 
-    res.status(201).json({ ...data, fileCount: 0, totalBytes: 0, updatedAt: null });
+    try {
+      await appendFolderOrder(data.id);
+    } catch (err) {
+      console.warn('Could not append folder order:', err.message || err);
+    }
+
+    res.status(201).json({ ...data, fileCount: 0, totalBytes: 0, updatedAt: null, sort_order: 9999 });
   })
 );
 
@@ -158,6 +258,17 @@ router.delete(
 
     const { error: deleteError } = await supabase.from('folders').delete().eq('id', req.params.id);
     if (deleteError) throw new HttpError(500, deleteError.message);
+
+    try {
+      await removeFolderOrder(req.params.id);
+    } catch (err) {
+      console.warn('Could not update folder order after delete:', err.message || err);
+    }
+    try {
+      await clearFileOrder(req.params.id);
+    } catch (err) {
+      console.warn('Could not clear file order after folder delete:', err.message || err);
+    }
 
     res.status(204).end();
   })

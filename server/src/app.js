@@ -39,7 +39,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) =>
+  res.json({ ok: true, apiBuild: '2026-11-02-reorder-files-v3-flat' })
+);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/folders', folderRoutes);

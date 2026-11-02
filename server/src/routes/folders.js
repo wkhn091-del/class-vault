@@ -100,15 +100,17 @@ router.put(
 );
 
 /**
- * PUT /api/folders/:id/reorder-files — admin.
- * Body: { ids: string[] } full ordered list of file ids in this folder.
+ * PUT /api/folders/reorder-files — admin.
+ * Body: { folderId: string, ids: string[] }
+ * Flat path (same style as /reorder) — nested /:id/... routes 404 on Vercel rewrite.
  */
 router.put(
-  '/:id/reorder-files',
+  '/reorder-files',
   requireAdmin,
   wrap(async (req, res) => {
-    const folderId = req.params.id;
+    const folderId = String(req.body?.folderId || '').trim();
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    if (!folderId) throw badRequest('Missing folderId.');
     if (!ids?.length) throw badRequest('Send the full file order as ids.');
 
     const { data: folder, error } = await supabase

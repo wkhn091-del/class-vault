@@ -6,6 +6,7 @@ import { buildStoragePath, tidyDisplayName, mapWithLimit } from '../lib/storage.
 import { resolveContentType } from '../lib/mime.js';
 import { describeStorageError } from '../middleware/error.js';
 import { badRequest, notFound, wrap, HttpError } from '../lib/errors.js';
+import { prependFileOrder, removeFileOrder } from '../lib/fileOrder.js';
 
 const router = Router();
 
@@ -154,6 +155,14 @@ router.post(
     }
 
     uploaded.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+    try {
+      await prependFileOrder(
+        folderId,
+        uploaded.map((f) => f.id)
+      );
+    } catch (err) {
+      console.warn('Could not update file order after upload:', err.message || err);
+    }
     res.status(201).json({ uploaded, failed });
   })
 );
@@ -263,7 +272,7 @@ router.delete(
   wrap(async (req, res) => {
     const { data: file, error } = await supabase
       .from('files')
-      .select('id, storage_path')
+      .select('id, folder_id, storage_path')
       .eq('id', req.params.id)
       .maybeSingle();
     if (error) throw new HttpError(500, error.message);
@@ -273,6 +282,12 @@ router.delete(
 
     const { error: deleteError } = await supabase.from('files').delete().eq('id', file.id);
     if (deleteError) throw new HttpError(500, deleteError.message);
+
+    try {
+      await removeFileOrder(file.folder_id, file.id);
+    } catch (err) {
+      console.warn('Could not update file order after delete:', err.message || err);
+    }
 
     res.status(204).end();
   })
